@@ -193,8 +193,35 @@ class ProgressTracker:
 
 @tool("web_search")
 def web_search(query: str) -> str:
-    """Search the web for the given query and return a short summary."""
-    return f"Search results for: {query}"
+    """Search the web via DuckDuckGo Instant Answer API and return a short summary with sources."""
+    import urllib.request
+    import urllib.parse
+    import json
+
+    try:
+        url = "https://api.duckduckgo.com/?" + urllib.parse.urlencode({
+            "q": query,
+            "format": "json",
+            "no_html": 1,
+            "skip_disambig": 1,
+        })
+        req = urllib.request.Request(url, headers={"User-Agent": "crewai-agent/1.0"})
+        with urllib.request.urlopen(req, timeout=8) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        parts = []
+        if data.get("Abstract"):
+            parts.append(data["Abstract"][:300])
+            if data.get("AbstractURL"):
+                parts.append(f"Source: {data['AbstractURL']}")
+
+        for topic in (data.get("RelatedTopics") or [])[:3]:
+            if isinstance(topic, dict) and topic.get("Text"):
+                parts.append(topic["Text"][:150])
+
+        return "\n".join(parts) if parts else f"No results found for: {query}"
+    except Exception as e:
+        return f"Search failed ({type(e).__name__}): {e}"
 
 
 @tool("file_reader")
